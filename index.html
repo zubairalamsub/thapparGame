@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>থাপ্পড়! Dhaka Rickshaw Justice</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div class="pill">স্কোর <b id="score">0</b></div>
+    <div class="pill">📍 <b id="roadName"></b></div>
+    <div class="pill">লেভেল <b id="level">1</b></div>
+    <div class="pill" id="lives">❤️❤️❤️</div>
+    <div class="pill combo hidden" id="combo">🔥 x2</div>
+    <button class="pill btn-icon" id="mute" title="Sound on/off">🔊</button>
+  </div>
+
+  <div id="start" class="overlay">
+    <div class="card">
+      <h1>থাপ্পড়! <span>🖐️</span></h1>
+      <p class="sub">Thappor — Dhaka Rickshaw Justice</p>
+      <p>ঢাকার রাস্তায় যে রিকশাওয়ালা <b>নিয়ম ভাঙছে</b>, তাকে ক্লিক করে থাপ্পড় দিন!
+        কিন্তু সাবধান — <b>নির্দোষকে</b> মারলে জীবন কমবে।</p>
+      <p class="en">Run up to the rule-breaking rickshaw drivers and slap them. Slap an honest one or let a rule-breaker escape and you lose a life.</p>
+      <div class="legend">
+        <div><span>⬅️</span>উল্টো পথে <small>Wrong way</small></div>
+        <div><span>🚦</span>লাল বাতি পার <small>Runs red light</small></div>
+        <div><span>🚶</span>ফুটপাথে রিকশা <small>On the footpath</small></div>
+        <div><span>📱</span>ফোনে কথা <small>On the phone</small></div>
+        <div><span>👨‍👩‍👧‍👦</span>অতিরিক্ত যাত্রী <small>Overloaded</small></div>
+        <div><span>💸</span>বেশি ভাড়া <small>Overcharging</small></div>
+        <div><span>⚡</span>টেসলা (মোটর রিকশা) <small>Motor "Tesla" — no pedals</small></div>
+      </div>
+      <div class="controls">
+        <div>👮 আপনি ট্রাফিক সার্জেন্ট! <small>You are the traffic sergeant</small></div>
+        <div>⌨️ <b>← ↑ → ↓ / WASD</b> চলুন · <b>Space</b> থাপ্পড় <small>Move · Slap drivers within reach</small></div>
+        <div>🖱️ রাস্তায় ক্লিক/ট্যাপ = দৌড়ান · রিকশায় ক্লিক = পিছু নিয়ে থাপ্পড় <small>Click the road to run, click a rickshaw to chase &amp; slap</small></div>
+        <div>✋ রিকশার সামনে দাঁড়ালে থেমে যাবে — পালাতে দেবেন না! <small>Stand in front of a rickshaw to block it</small></div>
+      </div>
+      <h2 class="pick-title">রাস্তা বাছাই করুন <small>Pick your starting road — every 2 levels you move to the next one</small></h2>
+      <div class="road-pick" id="roadPick"></div>
+      <p class="tip">টিপস: সবুজ বাতিতে পার হলে দোষ নেই। লেভেল বাড়লে ভালো রিকশাওয়ালারাও কথা বলবে — পড়ে দেখুন!</p>
+      <p class="rotate">📱↻ ভালোভাবে খেলতে ফোন আড়াআড়ি (landscape) করুন</p>
+      <button class="play" id="startBtn">শুরু করুন ▶</button>
+      <p class="best">সেরা স্কোর: <b id="bestStart">0</b></p>
+    </div>
+  </div>
+
+  <div id="over" class="overlay hidden">
+    <div class="card">
+      <h1>খেলা শেষ!</h1>
+      <p class="sub">Game Over</p>
+      <p class="big">স্কোর: <b id="finalScore">0</b></p>
+      <p>সেরা স্কোর: <b id="bestOver">0</b></p>
+      <p class="rank" id="rank"></p>
+      <p id="overRoad"></p>
+      <button class="play" id="againBtn">আবার খেলুন ↻</button>
+      <button class="play secondary" id="menuBtn">রাস্তা বদলান</button>
+    </div>
+  </div>
+
+  <script src="js/core.js"></script>
+  <script src="js/street.js"></script>
+  <script src="js/sprites.js"></script>
+  <script src="js/roads/badda.js"></script>
+  <script src="js/roads/linkroad.js"></script>
+  <script src="js/roads/kuril.js"></script>
+  <script src="js/roads/airport.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>

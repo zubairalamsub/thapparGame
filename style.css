@@ -1,0 +1,176 @@
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #1b1b22;
+  font-family: "Hind Siliguri", "Nirmala UI", system-ui, sans-serif;
+  color: #222;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+canvas {
+  display: block;
+  touch-action: none;
+  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='44'><text x='4' y='36' font-size='34'>✋</text></svg>") 22 22, pointer;
+}
+
+.hidden { display: none !important; }
+
+#hud {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  pointer-events: none;
+  width: calc(100% - 16px);
+}
+
+.pill {
+  background: rgba(20, 20, 28, 0.78);
+  color: #fff;
+  padding: 4px 14px;
+  border-radius: 999px;
+  font-size: 17px;
+  line-height: 1.5;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  white-space: nowrap;
+}
+.pill b { color: #ffd166; }
+.combo { background: #e63946; }
+
+.btn-icon {
+  pointer-events: auto;
+  cursor: pointer;
+  font: inherit;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 10, 16, 0.55);
+  padding: 16px;
+}
+
+.card {
+  background: #fff8ec;
+  border: 4px solid #e63946;
+  border-radius: 20px;
+  padding: 20px 24px;
+  width: 100%;
+  max-width: 560px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  text-align: center;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.card h1 {
+  margin: 0;
+  font-size: 46px;
+  line-height: 1.2;
+  color: #d62828;
+}
+.card .sub { margin: 0 0 10px; color: #666; font-weight: 700; letter-spacing: 0.5px; }
+.card p { margin: 8px 0; font-size: 16px; line-height: 1.5; }
+.card .en { color: #555; font-size: 14px; }
+.card .tip { font-size: 14px; color: #7a4b00; background: #ffecc2; border-radius: 10px; padding: 6px 10px; }
+.card .big { font-size: 28px; }
+.card .rank { font-size: 20px; font-weight: 700; color: #2b9348; }
+
+.legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+  text-align: left;
+}
+.legend div {
+  background: #fff;
+  border: 2px solid #f1d3a8;
+  border-radius: 12px;
+  padding: 6px 8px;
+  font-weight: 700;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.legend span { font-size: 22px; }
+.legend small { width: 100%; font-weight: 500; color: #777; font-size: 12px; margin-left: 34px; margin-top: -6px; }
+
+.controls {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+  text-align: left;
+}
+.controls div {
+  background: #eef6ff;
+  border: 2px solid #c7ddf5;
+  border-radius: 12px;
+  padding: 6px 10px;
+  font-size: 14px;
+}
+.controls small { display: block; color: #667; font-size: 12px; }
+
+.pick-title { font-size: 18px; margin: 14px 0 6px; color: #7f1d1d; }
+.pick-title small { display: block; font-size: 12px; font-weight: 500; color: #777; }
+.road-pick {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.road-btn {
+  font: inherit;
+  cursor: pointer;
+  background: #fff;
+  border: 3px solid #f1d3a8;
+  border-radius: 12px;
+  padding: 6px 4px;
+  line-height: 1.25;
+}
+.road-btn b { display: block; font-size: 16px; color: #222; }
+.road-btn small { color: #777; font-size: 12px; }
+.road-btn.on { border-color: #e63946; background: #ffe8e8; box-shadow: 0 3px 0 #e63946; }
+
+.play {
+  margin-top: 8px;
+  font: inherit;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  background: #e63946;
+  border: none;
+  border-radius: 14px;
+  padding: 10px 34px;
+  cursor: pointer;
+  box-shadow: 0 5px 0 #9d0208;
+  transition: transform 0.08s;
+}
+.play.secondary { background: #1d3557; box-shadow: 0 5px 0 #0b1a2e; font-size: 18px; margin-left: 6px; }
+.play:active { transform: translateY(4px); box-shadow: 0 1px 0 #9d0208; }
+
+.best { color: #555; }
+
+.rotate { display: none; }
+@media (orientation: portrait) and (max-width: 700px) {
+  .card .rotate { display: block; font-weight: 700; color: #1d4ed8; }
+}
+
+@media (max-width: 480px) {
+  .card { padding: 14px 16px; }
+  .card h1 { font-size: 36px; }
+  .pill { font-size: 14px; padding: 3px 10px; }
+}
