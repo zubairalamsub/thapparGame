@@ -11,7 +11,13 @@
   const $ = (id) => document.getElementById(id);
   const isTouch = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
   if (isTouch) document.body.classList.add('touch');
-  const buzz = (pattern) => { try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) { /* unsupported */ } };
+  // Haptics on phones only, and only after the player has touched the page (browsers block it before).
+  const buzz = (pattern) => {
+    try {
+      const ua = navigator.userActivation;
+      if (isTouch && navigator.vibrate && (!ua || ua.hasBeenActive)) navigator.vibrate(pattern);
+    } catch (e) { /* unsupported */ }
+  };
   const pick = (a) => a[(Math.random() * a.length) | 0];
   const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
