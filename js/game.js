@@ -9,11 +9,14 @@
   let scale = 1, offX = 0, offY = 0, dpr = 1;
 
   const $ = (id) => document.getElementById(id);
+  const isTouch = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+  if (isTouch) document.body.classList.add('touch');
+  const buzz = (pattern) => { try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) { /* unsupported */ } };
   const pick = (a) => a[(Math.random() * a.length) | 0];
   const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
   function resize() {
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    dpr = Math.min(window.devicePixelRatio || 1, isTouch ? 1.5 : 2); // phones: trade a little sharpness for frame rate
     const cw = window.innerWidth, ch = window.innerHeight;
     canvas.width = Math.floor(cw * dpr);
     canvas.height = Math.floor(ch * dpr);
@@ -293,6 +296,7 @@
     shakeT: 0, hurtT: 0, dyingT: 0, time: 0,
     player: newPlayer(),
     startRoad: 0, roadIdx: 0,
+    paused: false, // phone held in portrait
     fade: null,   // { t, to } road transition
     banner: null, // { road, t }
   };
@@ -418,8 +422,32 @@
     $('hud').classList.remove('hidden');
     updateHUD();
     addText(W / 2, 250, 'নিয়ম ভাঙা রিকশাওয়ালাকে থাপ্পড় দিন!', '#ffd166', 30, 3, -8);
-    addText(W / 2, 292, '← ↑ → ↓ / WASD চলুন · Space থাপ্পড় · অথবা ক্লিক/ট্যাপ', '#fff', 18, 3.5, -8);
+    addText(W / 2, 292, isTouch ? 'বামে জয়স্টিকে চলুন · ডানে ✋ বোতামে থাপ্পড় · রিকশায় ট্যাপ = পিছু নিন'
+      : '← ↑ → ↓ / WASD চলুন · Space থাপ্পড় · অথবা ক্লিক/ট্যাপ', '#fff', 18, 3.5, -8);
+    $('touchUI').classList.toggle('hidden', !isTouch);
+    if (isTouch) goFullscreen();
+    checkOrientation();
   }
+
+  // Fullscreen + landscape lock where the browser allows it (Android Chrome; iOS ignores it).
+  function goFullscreen() {
+    const el = document.documentElement;
+    const lock = () => { try { const o = screen.orientation; if (o && o.lock) o.lock('landscape').catch(() => {}); } catch (e) { /* unsupported */ } };
+    try {
+      if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen({ navigationUI: 'hide' }).then(lock, () => {});
+      else lock();
+    } catch (e) { /* unsupported */ }
+  }
+
+  // On phones the game needs landscape: pause and ask to rotate while held upright.
+  const portraitMQ = window.matchMedia('(orientation: portrait)');
+  function checkOrientation() {
+    const need = isTouch && portraitMQ.matches && G.state === 'play';
+    G.paused = need;
+    $('rotate').classList.toggle('hidden', !need);
+  }
+  window.addEventListener('resize', checkOrientation);
+  if (portraitMQ.addEventListener) portraitMQ.addEventListener('change', checkOrientation);
 
   function rankFor(s) {
     if (s < 50) return '🚸 নতুন ট্রাফিক কনস্টেবল';
@@ -439,10 +467,13 @@
     $('overRoad').textContent = road ? `📍 ${road.name} (${road.nameEn}) পর্যন্ত পৌঁছেছেন` : '';
     $('bestStart').textContent = G.best;
     $('hud').classList.add('hidden');
+    $('touchUI').classList.add('hidden');
     $('over').classList.remove('hidden');
+    checkOrientation();
   }
 
   function loseLife() {
+    buzz(120);
     G.lives--;
     G.combo = 0;
     G.hurtT = 0.45;
@@ -476,6 +507,7 @@
     if (p.target && p.target.k === k) p.target = null;
     G.fx.push({ x: hx, y: hy, t: 0, from: p.x < hx ? -1 : 1 });
     G.shakeT = 0.25;
+    buzz(k.guilty ? 30 : [60, 40, 60]);
     Sound.slap();
     burst(hx, hy, 12, ['#ffd166', '#fff', '#ff6b6b']);
     addText(hx, hy - 40, 'থাপ্পড়!', '#fff', 40, 0.8, -60);
@@ -563,6 +595,41 @@
   window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
   window.addEventListener('blur', () => keys.clear());
 
+  // ---------- Touch controls: joystick (left) + slap button (right) ----------
+  const touchVec = { x: 0, y: 0 };
+  (function setupTouchControls() {
+    const base = $('stick'), knob = $('knob');
+    const R = 46;
+    let id = null;
+    const move = (e) => {
+      const r = base.getBoundingClientRect();
+      let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+      const d = Math.hypot(dx, dy);
+      if (d > R) { dx *= R / d; dy *= R / d; }
+      knob.style.transform = `translate(${dx}px, ${dy}px)`;
+      touchVec.x = dx / R; touchVec.y = dy / R;
+    };
+    const end = (e) => {
+      if (e && e.pointerId !== id) return;
+      id = null; touchVec.x = 0; touchVec.y = 0; knob.style.transform = '';
+    };
+    base.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); Sound.init();
+      id = e.pointerId;
+      try { base.setPointerCapture(id); } catch (err) { /* ignore */ }
+      move(e);
+    });
+    base.addEventListener('pointermove', (e) => { if (e.pointerId === id) move(e); });
+    base.addEventListener('pointerup', end);
+    base.addEventListener('pointercancel', end);
+    base.addEventListener('lostpointercapture', end);
+    $('slapBtn').addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      if (G.state !== 'play') return;
+      Sound.init(); trySlap();
+    });
+  })();
+
   function updatePlayer(dt) {
     const p = G.player;
     p.cooldown = Math.max(0, p.cooldown - dt);
@@ -574,10 +641,15 @@
     if (keys.has('arrowup') || keys.has('w')) vy--;
     if (keys.has('arrowdown') || keys.has('s')) vy++;
 
+    const stick = Math.hypot(touchVec.x, touchVec.y);
     if (vx || vy) {
       p.target = null;
       const len = Math.hypot(vx, vy);
       vx = (vx / len) * P_SPEED; vy = (vy / len) * P_SPEED * 0.8;
+    } else if (stick > 0.18) { // analog joystick: speed follows how far it's pushed
+      p.target = null;
+      const m = Math.min(1, stick);
+      vx = (touchVec.x / stick) * m * P_SPEED; vy = (touchVec.y / stick) * m * P_SPEED * 0.8;
     } else if (p.target) {
       let tx, ty;
       const k = p.target.k;
@@ -894,7 +966,7 @@
   function frame(now) {
     const dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
     last = now;
-    update(dt);
+    if (!G.paused) update(dt);
     render();
     requestAnimationFrame(frame);
   }
@@ -926,7 +998,14 @@
     G.state = 'menu';
     $('over').classList.add('hidden');
     $('start').classList.remove('hidden');
+    checkOrientation();
   });
+  if (document.fullscreenEnabled) {
+    $('fsBtn').classList.remove('hidden');
+    $('fsBtn').addEventListener('click', () => {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else goFullscreen();
+    });
+  }
   $('mute').addEventListener('click', () => {
     Sound.setMuted(!Sound.muted);
     $('mute').textContent = Sound.muted ? '🔇' : '🔊';
