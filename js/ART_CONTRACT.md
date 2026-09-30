@@ -1,5 +1,7 @@
 # Art contract (Thappor!)
 
+This file covers the **Classic** side view. The first-person view has its own contract in `FP_CONTRACT.md`.
+
 All art is drawn on a 2D canvas in **logical coordinates**: a 1000 × 600 world (`TH.W`, `TH.H`), scaled to the window by `game.js`.
 Scripts load in this order: `core.js` → `street.js` → `sprites.js` → `roads/*.js` → `game.js`.
 Every file is an IIFE that adds to `window.TH`. Helpers from `core.js`: `TH.rr(ctx,x,y,w,h,r)` (rounded-rect path), `TH.circle(ctx,x,y,r,fill)`, `TH.line(ctx,[x0,y0,x1,y1,...],color,width)`, `TH.mulberry32(seed)`, `TH.FONT`.

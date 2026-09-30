@@ -4,9 +4,17 @@ A browser game: you're a Dhaka traffic sergeant. Run up to the rickshaw drivers 
 
 **Play:** open `index.html` in a browser. There's no build step and no dependencies. You can also serve the folder, for example with `python -m http.server`.
 
+## Views
+- **👁️ First-person** (default): you see through the sergeant's eyes, standing on the road facing the oncoming rickshaws. Your hands are at the bottom of the screen, and the slap happens up close. Wrong-way riders come from behind you, so watch for the "পেছনে!" warning and chase them.
+- **🎬 Classic:** the original side view.
+
+Pick the view on the start screen. The game remembers your choice.
+
 ## Controls
-- **Keyboard:** ← ↑ → ↓ / WASD to move, Space or J to slap.
+- **Keyboard (first-person):** ↑/W forward, ↓/S back, ←/→ or A/D to step across the lanes, Space or J to slap.
+- **Keyboard (Classic):** ← ↑ → ↓ / WASD to move, Space or J to slap.
 - **Mouse or touch:** tap the road to run there. Tap a rickshaw to chase it and slap it.
+- **Phones:** the joystick moves you and the ✋ button slaps.
 - Stand in front of a rickshaw to block it.
 
 ## Rule-breakers
@@ -17,6 +25,10 @@ You move to the next road every 2 levels, or pick where to start: Badda → Guls
 
 ## Code
 - `js/core.js`: shared constants and drawing helpers
+- `js/fpcore.js`: first-person camera, projection and drawing helpers
+- `js/fpview.js`: first-person renderer (layers, lighting, hands, picking)
+- `js/fpstreet.js`, `js/fpsprites.js`, `js/fptraffic.js`, `js/fproads/*.js`: first-person art (street, rickshaws and hands, background traffic and street life, per-road scenery)
+- `js/FP_CONTRACT.md`: units, layers and hooks for the first-person art
 - `js/street.js`: street, curb, markings, traffic light
 - `js/sprites.js`: rickshaws, passengers, the sergeant, speech bubbles
 - `js/roads/*.js`: one file per road with its own scenery

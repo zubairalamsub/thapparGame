@@ -184,6 +184,8 @@ canvas {
 /* ---------- Touch controls ---------- */
 body:not(.touch) .touch-only { display: none; }
 body.touch .kb-only { display: none; }
+body.view-fp .classic-only, body.view-classic .fp-only { display: none; }
+.view-pick { grid-template-columns: repeat(3, 1fr); }
 body.touch canvas { cursor: default; }
 
 #touchUI { position: fixed; inset: 0; pointer-events: none; }
@@ -271,4 +273,7 @@ body.touch canvas { cursor: default; }
   #startBtn, #againBtn { position: sticky; bottom: 4px; z-index: 2; }
   #stick { width: 104px; height: 104px; }
   #slapBtn { width: 90px; height: 90px; font-size: 32px; }
+}
+@media (max-height: 500px) {
+  .view-pick { grid-template-columns: repeat(3, 1fr); }
 }

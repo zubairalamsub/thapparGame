@@ -21,6 +21,7 @@
     <div class="pill">লেভেল <b id="level">1</b></div>
     <div class="pill" id="lives">❤️❤️❤️</div>
     <div class="pill combo hidden" id="combo">🔥 x2</div>
+    <button class="pill btn-icon hidden" id="camBtn" title="Camera: first / third person (C)">👁️</button>
     <button class="pill btn-icon" id="mute" title="Sound on/off">🔊</button>
     <button class="pill btn-icon hidden" id="fsBtn" title="Fullscreen">⛶</button>
   </div>
@@ -56,11 +57,19 @@
       </div>
       <div class="controls">
         <div>👮 আপনি ট্রাফিক সার্জেন্ট! <small>You are the traffic sergeant</small></div>
-        <div class="kb-only">⌨️ <b>← ↑ → ↓ / WASD</b> চলুন · <b>Space</b> থাপ্পড় <small>Move · Slap drivers within reach</small></div>
+        <div class="kb-only classic-only">⌨️ <b>← ↑ → ↓ / WASD</b> চলুন · <b>Space</b> থাপ্পড় <small>Move · Slap drivers within reach</small></div>
+        <div class="kb-only fp-only">⌨️ <b>↑/W</b> সামনে · <b>↓/S</b> পেছনে · <b>←/→</b> পাশে · <b>Space</b> থাপ্পড় <small>Forward, back, strafe across the lanes · Slap drivers within reach</small></div>
         <div class="kb-only">🖱️ রাস্তায় ক্লিক = দৌড়ান · রিকশায় ক্লিক = পিছু নিয়ে থাপ্পড় <small>Click the road to run, click a rickshaw to chase &amp; slap</small></div>
         <div class="touch-only">🕹️ বামে জয়স্টিক = চলুন · ডানে ✋ = থাপ্পড় <small>Joystick to move, ✋ button to slap</small></div>
         <div class="touch-only">👆 রাস্তায় ট্যাপ = দৌড়ান · রিকশায় ট্যাপ = পিছু নিয়ে থাপ্পড় <small>Tap the road to run, tap a rickshaw to chase &amp; slap</small></div>
         <div>✋ রিকশার সামনে দাঁড়ালে থেমে যাবে — পালাতে দেবেন না! <small>Stand in front of a rickshaw to block it</small></div>
+        <div class="fp-only">⚠️ উল্টো পথের রিকশা পেছন থেকে আসে — ধাওয়া করে থাপ্পড় দিন! <small>Wrong-way riders come from behind you: chase them down</small></div>
+      </div>
+      <h2 class="pick-title">ক্যামেরা বাছাই করুন <small>Pick your camera · in-game, 🎥 / C swaps first ↔ third person</small></h2>
+      <div class="road-pick view-pick" id="viewPick">
+        <button type="button" class="road-btn" data-view="fp"><b>👁️ ফার্স্ট-পারসন</b><small>First-person · through your eyes</small></button>
+        <button type="button" class="road-btn" data-view="tp"><b>🧍 থার্ড-পারসন</b><small>Third-person · behind you</small></button>
+        <button type="button" class="road-btn" data-view="classic"><b>🎬 ক্লাসিক</b><small>Classic side view</small></button>
       </div>
       <h2 class="pick-title">রাস্তা বাছাই করুন <small>Pick your starting road — every 2 levels you move to the next one</small></h2>
       <div class="road-pick" id="roadPick"></div>
@@ -91,6 +100,16 @@
   <script src="js/roads/linkroad.js"></script>
   <script src="js/roads/kuril.js"></script>
   <script src="js/roads/airport.js"></script>
+  <script src="js/fpcore.js"></script>
+  <script src="js/fpstreet.js"></script>
+  <script src="js/fpsprites.js"></script>
+  <script src="js/fptraffic.js"></script>
+  <script src="js/fpplayer.js"></script>
+  <script src="js/fproads/badda.js"></script>
+  <script src="js/fproads/linkroad.js"></script>
+  <script src="js/fproads/kuril.js"></script>
+  <script src="js/fproads/airport.js"></script>
+  <script src="js/fpview.js"></script>
   <script src="js/game.js"></script>
 </body>
 </html>

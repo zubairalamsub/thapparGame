@@ -4,6 +4,7 @@
   const TH = window.TH;
   const { W, H, STOP_X, FOOT_Y, LANES, FONT } = TH;
 
+  const FPV = TH.fpView || null; // first-person renderer (js/fpview.js); Classic works without it
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   let scale = 1, offX = 0, offY = 0, dpr = 1;
@@ -21,8 +22,10 @@
   const pick = (a) => a[(Math.random() * a.length) | 0];
   const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
+  // Resolution scale: 1 = full. Lowered automatically when the frame rate can't keep up (slow phones).
+  let quality = 1;
   function resize() {
-    dpr = Math.min(window.devicePixelRatio || 1, isTouch ? 1.5 : 2); // phones: trade a little sharpness for frame rate
+    dpr = Math.min(window.devicePixelRatio || 1, isTouch ? 1.5 : 2) * quality; // phones: trade a little sharpness for frame rate
     const cw = window.innerWidth, ch = window.innerHeight;
     canvas.width = Math.floor(cw * dpr);
     canvas.height = Math.floor(ch * dpr);
@@ -39,6 +42,14 @@
   const BEST_KEY = 'thappor-best';
   function loadBest() { try { return parseInt(localStorage.getItem(BEST_KEY), 10) || 0; } catch (e) { return 0; } }
   function saveBest(v) { try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) { /* ignore */ } }
+  const VIEW_KEY = 'thappor-view';
+  function loadView() {
+    let v = null;
+    try { v = localStorage.getItem(VIEW_KEY); } catch (e) { /* ignore */ }
+    if (!FPV || v === 'classic') return 'classic';
+    return v === 'tp' ? 'tp' : 'fp';
+  }
+  function saveView(v) { try { localStorage.setItem(VIEW_KEY, v); } catch (e) { /* ignore */ } }
 
   // ---------- Sound (Web Audio, synthesized) ----------
   const AMB_BED = 0.03; // volume of the background street/breeze loop
@@ -291,27 +302,38 @@
   const P_MIN_Y = FOOT_Y + 4, P_MAX_Y = H - 4;
   const P_SPEED = 290;
   const REACH_X = 85, REACH_Y = 42;
-  const newPlayer = () => ({ x: 500, y: 470, facing: 1, walkT: 0, moving: false, slapAnim: 0, cooldown: 0, target: null });
+  const newPlayer = () => (G && G.view !== 'classic'
+    ? { x: 900, y: 510, facing: -1, walkT: 0, moving: false, slapAnim: 0, cooldown: 0, target: null }
+    : { x: 500, y: 470, facing: 1, walkT: 0, moving: false, slapAnim: 0, cooldown: 0, target: null });
 
   // ---------- Game state ----------
-  const G = {
+  let G = null;
+  G = {
     state: 'menu', // menu | play | dying | over
     score: 0, best: loadBest(), lives: 3, level: 1, combo: 0,
     rickshaws: [], texts: [], particles: [], fx: [],
     spawnT: 0.5, light: 'green', lightT: 5,
     shakeT: 0, hurtT: 0, dyingT: 0, time: 0,
-    player: newPlayer(),
+    player: null,
+    view: loadView(), // 'fp' first-person | 'tp' third-person (both facing traffic) | 'classic' side view
+    hitStop: 0, slowmo: 0, // slap hit feel: freeze, then slow motion
     startRoad: 0, roadIdx: 0,
     paused: false, // phone held in portrait
     fade: null,   // { t, to } road transition
     banner: null, // { road, t }
   };
+  G.player = newPlayer();
+  // First- and third-person share the "facing traffic" rules; only the camera differs.
+  const isFP = () => G.view !== 'classic' && !!FPV;
 
   const groundY = (k) => (k.lane < 0 ? FOOT_Y : LANES[k.lane]);
   const driverX = (k) => k.x + 33 * k.dir;
+  // First-person reach is measured from the rickshaw end facing the sergeant (see fpview.js).
+  const fpGap = (k) => G.player.x - FPV.nearEnd(k);
   const inReach = (k) => !k.slapped
     && Math.abs(G.player.y - groundY(k)) < REACH_Y
-    && Math.abs(driverX(k) - G.player.x) < REACH_X;
+    && (isFP() ? fpGap(k) > FPV.C.REACH_MIN && fpGap(k) < FPV.C.REACH_MAX
+      : Math.abs(driverX(k) - G.player.x) < REACH_X);
 
   function laneClear(lane, x) {
     return !G.rickshaws.some((o) => o.lane === lane && Math.abs(o.x - x) < 165);
@@ -332,14 +354,28 @@
       violation: null, guilty: false, obeys: true,
       passengers: Math.random() < 0.12 ? 0 : 1 + ((Math.random() * 2) | 0),
       wheelA: Math.random() * 6, t: Math.random() * 10,
-      slapped: false, slapT: 0, bubble: null, say: null,
+      slapped: false, slapT: 0, bubble: null, say: null, age: 0,
       hood: pick(HOODS), body: pick(BODIES), vest: pick(VESTS), lungi: pick(LUNGIS), skin: pick(SKINS),
       pax: [], seed: (Math.random() * 1e9) | 0,
     };
     const r = Math.random();
     let type = null;
+    const fpPlay = isFP() && G.state === 'play';
     if (r < 0.14) type = 'redlight';
-    else if (r < 0.14 + 0.46) type = pickGuiltyType();
+    else if (r < 0.14 + (fpPlay ? 0.54 : 0.46)) type = pickGuiltyType();
+
+    // First-person: you can only stand in one lane, so rule-breakers are spaced out in time.
+    // A new one that would reach you too close to another is spawned honest instead.
+    const fpGapT = Math.max(1.1, 2.2 - 0.12 * (Math.min(lvl, 12) - 1));
+    // oncoming traffic has a long way to come in first-person: early levels move a bit quicker
+    const fpBoost = isFP() ? Math.max(1, 1.35 - 0.05 * (lvl - 1)) : 1;
+    const etaClash = (eta) => G.rickshaws.some((o) => o.eta !== undefined && !o.slapped && Math.abs(o.eta - eta) < fpGapT);
+    let eta;
+    if (fpPlay && type && type !== 'redlight') {
+      const sp = 72 * fpBoost * (1 + (Math.min(lvl, 10) - 1) * 0.12) * (type === 'wrongway' ? 1.1 : 1) * (type === 'tesla' ? 1.4 : 1);
+      eta = G.time + (type === 'wrongway' ? FPV.C.BEHIND / sp + 2.5 : FPV.C.SPAWN_AHEAD / sp);
+      if (etaClash(eta)) { type = null; eta = undefined; }
+    }
 
     k.violation = type;
     if (type === 'redlight') k.obeys = false; // guilty only if it actually crosses on red
@@ -347,13 +383,14 @@
     else if (lvl >= 2 && Math.random() < 0.25 + 0.06 * lvl) k.bubble = pick(DECOYS);
 
     if (type === 'wrongway') k.dir = -1;
-    if (type === 'footpath') { k.lane = -1; k.dir = Math.random() < 0.5 ? 1 : -1; }
+    if (type === 'footpath') { k.lane = -1; k.dir = isFP() || Math.random() < 0.5 ? 1 : -1; } // first-person: only wrong-way riders come from behind
     if (type === 'overload') k.passengers = 5;
     if (type === 'overcharge' && k.passengers === 0) k.passengers = 1;
 
-    k.speed = (55 + Math.random() * 35) * (1 + (Math.min(lvl, 10) - 1) * 0.12)
+    k.speed = (55 + Math.random() * 35) * fpBoost * (1 + (Math.min(lvl, 10) - 1) * 0.12)
       * (type === 'redlight' ? 1.35 : 1) * (type === 'wrongway' ? 1.1 : 1) * (type === 'tesla' ? 1.4 : 1);
     k.x = k.dir === 1 ? -90 : W + 90;
+    if (isFP()) k.x = k.dir === 1 ? FPV.camX() - FPV.C.SPAWN_AHEAD : FPV.camX() + FPV.C.BEHIND;
 
     if (type === 'redlight') {
       // needs an open lane up to the stop line, and a speed that reaches it while the light is red
@@ -366,8 +403,13 @@
         const arrive = redIn + 0.4 + Math.random() * (redLeft - 1.2);
         k.speed = Math.min(260, Math.max(70, (STOP_X - 60 - k.x) / arrive));
         k.lane = open;
+        if (fpPlay) {
+          eta = G.time + (FPV.camX() - k.x) / k.speed;
+          if (etaClash(eta)) { k.violation = null; k.obeys = true; eta = undefined; }
+        }
       }
     }
+    if (eta !== undefined) k.eta = eta;
 
     if (k.violation === 'redlight') { /* lane already chosen */ }
     else if (k.lane !== -1) {
@@ -380,10 +422,12 @@
     G.rickshaws.push(k);
     if (G.state === 'play' && !k.guilty && Math.random() < 0.2) Sound.bell();
     if (G.state === 'play' && type === 'tesla') { Sound.motor(); Sound.zap(); }
+    if (G.state === 'play' && isFP() && k.dir === -1) Sound.clownHorn(); // coming up behind you
   }
 
-  function addText(x, y, text, color, size = 26, life = 1, vy = -40) {
-    G.texts.push({ x, y, text, color, size, life, t: 0, vy });
+  // In first-person, `k` pins the text to that rickshaw's head (dy px above it); otherwise x, y are screen coords.
+  function addText(x, y, text, color, size = 26, life = 1, vy = -40, k = null, dy = 0) {
+    G.texts.push({ x, y, y0: y, text, color, size, life, t: 0, vy, k: isFP() ? k : null, dy });
   }
 
   function burst(x, y, n, colors) {
@@ -394,7 +438,8 @@
   }
 
   // Soft dust puffs kicked up behind a fleeing rickshaw.
-  function dust(x, y, dir) {
+  function dust(x, y, dir, k) {
+    if (isFP()) { if (k) FPV.dust(k); return; }
     for (let i = 0; i < 6; i++) {
       G.particles.push({ kind: 'dust', x: x + (Math.random() - 0.5) * 20, y: y - Math.random() * 8, vx: -dir * (40 + Math.random() * 80), vy: -10 - Math.random() * 25, t: 0, life: 0.6 + Math.random() * 0.4, size: 6 + Math.random() * 6 });
     }
@@ -419,9 +464,10 @@
       state: 'play', score: 0, lives: 3, level: 1, combo: 0,
       rickshaws: [], texts: [], particles: [], fx: [],
       spawnT: 0.3, light: 'green', lightT: 5, shakeT: 0, hurtT: 0,
-      player: newPlayer(), roadIdx: G.startRoad, fade: null,
+      player: newPlayer(), roadIdx: G.startRoad, fade: null, hitStop: 0, slowmo: 0,
       banner: { road: ROADS[G.startRoad], t: 0 },
     });
+    if (FPV) FPV.reset();
     keys.clear();
     $('start').classList.add('hidden');
     $('over').classList.add('hidden');
@@ -429,7 +475,9 @@
     updateHUD();
     addText(W / 2, 250, 'নিয়ম ভাঙা রিকশাওয়ালাকে থাপ্পড় দিন!', '#ffd166', 30, 3, -8);
     addText(W / 2, 292, isTouch ? 'বামে জয়স্টিকে চলুন · ডানে ✋ বোতামে থাপ্পড় · রিকশায় ট্যাপ = পিছু নিন'
-      : '← ↑ → ↓ / WASD চলুন · Space থাপ্পড় · অথবা ক্লিক/ট্যাপ', '#fff', 18, 3.5, -8);
+      : isFP() ? '↑/W সামনে · ↓/S পেছনে · ←/→ পাশে সরুন · Space থাপ্পড় · অথবা রিকশায় ক্লিক'
+        : '← ↑ → ↓ / WASD চলুন · Space থাপ্পড় · অথবা ক্লিক/ট্যাপ', '#fff', 18, 3.5, -8);
+    if (isFP()) addText(W / 2, 330, 'উল্টো পথের রিকশা পেছন থেকে আসে — ধাওয়া করুন!', '#ffb703', 17, 3.5, -8);
     $('touchUI').classList.toggle('hidden', !isTouch);
     if (isTouch) goFullscreen();
     checkOrientation();
@@ -505,18 +553,22 @@
     k.slapped = true;
     k.slapT = 0;
     const gy = groundY(k);
-    const hx = driverX(k), hy = gy - 90;
+    const fp = isFP();
+    const hs = fp ? FPV.headScreen(k) : null;
+    const hx = fp ? hs.x : driverX(k), hy = fp ? hs.y : gy - 90;
     const p = G.player;
-    p.facing = Math.sign(hx - p.x) || p.facing;
+    if (!fp) p.facing = Math.sign(hx - p.x) || p.facing;
     p.slapAnim = 0.001;
     p.cooldown = 0.32;
     if (p.target && p.target.k === k) p.target = null;
-    G.fx.push({ x: hx, y: hy, t: 0, from: p.x < hx ? -1 : 1 });
+    G.fx.push({ x: hx, y: hy, t: 0, from: p.x < hx ? -1 : 1, good: k.guilty, big: fp });
+    if (fp) FPV.onSlap(k, k.guilty);
+    G.hitStop = 0.07; G.slowmo = 0.22;
     G.shakeT = 0.25;
     buzz(k.guilty ? 30 : [60, 40, 60]);
     Sound.slap();
     burst(hx, hy, 12, ['#ffd166', '#fff', '#ff6b6b']);
-    addText(hx, hy - 40, 'থাপ্পড়!', '#fff', 40, 0.8, -60);
+    addText(hx, hy - 40, 'থাপ্পড়!', '#fff', fp ? 54 : 40, 0.8, -60);
 
     if (k.guilty) {
       G.combo++;
@@ -547,7 +599,7 @@
     let best = null, bd = Infinity;
     for (const k of G.rickshaws) {
       if (!inReach(k)) continue;
-      const d = Math.abs(driverX(k) - p.x) + Math.abs(groundY(k) - p.y);
+      const d = (isFP() ? Math.abs(fpGap(k) - 25) : Math.abs(driverX(k) - p.x)) + Math.abs(groundY(k) - p.y);
       if (d < bd) { bd = d; best = k; }
     }
     if (best) { slap(best); return; }
@@ -555,7 +607,8 @@
     p.cooldown = 0.32;
     Sound.whoosh();
     Sound.boop();
-    addText(p.x + p.facing * 45, p.y - 75, '💨', '#fff', 24, 0.5, -30);
+    if (isFP()) { FPV.onMiss(); addText(470, 360, '💨', '#fff', 34, 0.5, -30); }
+    else addText(p.x + p.facing * 45, p.y - 75, '💨', '#fff', 24, 0.5, -30);
   }
 
   // Click / tap: on a rickshaw -> chase it and slap; elsewhere -> run there.
@@ -567,6 +620,16 @@
     const px = (e.clientX - rect.left - offX) / scale;
     const py = (e.clientY - rect.top - offY) / scale;
     if (px < 0 || px > W || py < 0 || py > H) return;
+    if (isFP()) {
+      const hitFP = FPV.pick(px, py);
+      if (!hitFP) return;
+      const p = G.player;
+      if (hitFP.k) p.target = { k: hitFP.k };
+      else {
+        p.target = { x: Math.max(FPV.C.PX_MIN, Math.min(FPV.C.PX_MAX, hitFP.x)), y: Math.max(P_MIN_Y, Math.min(P_MAX_Y, hitFP.y)) };
+      }
+      return;
+    }
     // tight, facing-aware boxes (carriage+hood and driver+front wheel); closest visual centre wins
     let hit = null, bd = Infinity;
     for (const k of G.rickshaws) {
@@ -593,6 +656,7 @@
   window.addEventListener('keydown', (e) => {
     const key = e.key.toLowerCase();
     if ((key === 'enter' || key === ' ') && (G.state === 'menu' || G.state === 'over')) { e.preventDefault(); startGame(); return; }
+    if (key === 'c' && !e.repeat) { toggleCamera(); return; }
     if (G.state !== 'play') return;
     if (MOVE_KEYS.includes(key)) e.preventDefault();
     keys.add(key);
@@ -642,10 +706,14 @@
     if (p.slapAnim > 0) { p.slapAnim += dt; if (p.slapAnim > 0.3) p.slapAnim = 0; }
 
     let vx = 0, vy = 0;
+    const fp = isFP();
     if (keys.has('arrowleft') || keys.has('a')) vx--;
     if (keys.has('arrowright') || keys.has('d')) vx++;
     if (keys.has('arrowup') || keys.has('w')) vy--;
     if (keys.has('arrowdown') || keys.has('s')) vy++;
+    // first-person: up = forward (toward the traffic, -x), left/right = strafe across the lanes (+y is left)
+    if (fp) { const kx = vx; vx = vy; vy = -kx; }
+    const tvx = fp ? touchVec.y : touchVec.x, tvy = fp ? -touchVec.x : touchVec.y;
 
     const stick = Math.hypot(touchVec.x, touchVec.y);
     if (vx || vy) {
@@ -655,7 +723,7 @@
     } else if (stick > 0.18) { // analog joystick: speed follows how far it's pushed
       p.target = null;
       const m = Math.min(1, stick);
-      vx = (touchVec.x / stick) * m * P_SPEED; vy = (touchVec.y / stick) * m * P_SPEED * 0.8;
+      vx = (tvx / stick) * m * P_SPEED; vy = (tvy / stick) * m * P_SPEED * 0.8;
     } else if (p.target) {
       let tx, ty;
       const k = p.target.k;
@@ -663,14 +731,17 @@
         if (k.slapped || !G.rickshaws.includes(k)) { p.target = null; }
         else {
           if (inReach(k) && p.cooldown === 0) { slap(k); }
-          const side = p.x < driverX(k) ? -1 : 1;
-          tx = driverX(k) + side * 45; ty = groundY(k) + 6;
+          if (fp) { tx = Math.max(FPV.C.PX_MIN, Math.min(FPV.C.PX_MAX, FPV.nearEnd(k) + 30)); ty = groundY(k); } // wait in its lane if it's still far
+          else {
+            const side = p.x < driverX(k) ? -1 : 1;
+            tx = driverX(k) + side * 45; ty = groundY(k) + 6;
+          }
         }
       } else { tx = p.target.x; ty = p.target.y; }
       if (p.target) {
         const dx = tx - p.x, dy = ty - p.y, d = Math.hypot(dx, dy);
         const step = Math.min(d, P_SPEED * dt);
-        if (d < 2) { if (!k) p.target = null; }
+        if (d < 2 || dt <= 0) { if (!k && d < 2) p.target = null; }
         else { vx = (dx / d) * step / dt; vy = (dy / d) * step / dt; }
       }
     }
@@ -681,18 +752,20 @@
       if (Math.abs(vx) > 20 && p.slapAnim === 0) p.facing = Math.sign(vx);
       p.walkT += dt;
     }
-    p.x = Math.max(20, Math.min(W - 20, p.x));
+    if (fp) p.x = Math.max(FPV.C.PX_MIN, Math.min(FPV.C.PX_MAX, p.x));
+    else p.x = Math.max(20, Math.min(W - 20, p.x));
     p.y = Math.max(P_MIN_Y, Math.min(P_MAX_Y, p.y));
   }
 
   // ---------- Update ----------
   function updateRickshaw(k, dt) {
     k.t += dt;
+    k.age += dt;
     if (k.slapped) {
       const was = k.slapT;
       k.slapT += dt;
       if (was < 0.7 && k.slapT >= 0.7) {
-        dust(k.x - k.dir * 50, groundY(k), k.dir);
+        dust(k.x - k.dir * 50, groundY(k), k.dir, k);
         if (G.state === 'play') Sound.slideDown();
       }
       const v = k.slapT < 0.7 ? 0 : k.dir * 340; // dazed, then flee
@@ -714,17 +787,18 @@
       // honest drivers stop at red / yellow if they haven't reached the line
       if (k.dir === 1 && k.obeys && G.light !== 'green' && k.x <= STOP_X - 61) nx = Math.min(nx, STOP_X - 62);
     }
-    // the sergeant standing in front blocks the rickshaw
-    if (G.state === 'play') {
+    // the sergeant standing in front blocks the rickshaw (first-person: only what he can see, i.e. oncoming ones)
+    const fp = isFP();
+    if (G.state === 'play' && (!fp || k.dir === 1)) {
       const p = G.player;
       const gap = (p.x - k.x) * k.dir;
-      if (Math.abs(p.y - groundY(k)) < 26 && gap > 55 && gap < 220) {
-        const lim = p.x - k.dir * 80;
+      if (Math.abs(p.y - groundY(k)) < 26 && gap > (fp ? FPV.C.BLOCK_MIN : 55) && gap < 220) {
+        const lim = p.x - k.dir * (fp ? FPV.C.BLOCK_STOP : 80);
         nx = k.dir === 1 ? Math.min(nx, lim) : Math.max(nx, lim);
         if ((nx - k.x) * k.dir < k.speed * dt * 0.5 && k.t - (k.bellT || -9) > 2.5) {
           k.bellT = k.t;
           if (Math.random() < 0.5) Sound.clownHorn(); else Sound.bell();
-          addText(k.x + k.dir * 20, groundY(k) - 140, 'সরেন মামা! 🔔', '#fff', 16, 1, -10);
+          addText(k.x + k.dir * 20, groundY(k) - 140, 'সরেন মামা! 🔔', '#fff', 16, 1, -10, k, -70);
         }
       }
     }
@@ -761,15 +835,29 @@
 
     if (G.state === 'play' || G.state === 'dying') updatePlayer(dt);
     for (const k of G.rickshaws) updateRickshaw(k, dt);
+    if (isFP()) FPV.update(dt, env());
+    const fp = isFP(), cx = fp ? FPV.camX() : 0;
+    const escape = (k) => {
+      if (G.state !== 'play' || k.slapped || !k.guilty) return;
+      k.guilty = false; k.bubble = null; k.escaped = true;
+      const ex = fp ? W / 2 : k.x < 0 ? 110 : W - 110;
+      const ey = fp ? (k.dir === 1 ? 470 : 215) : groundY(k) - 70;
+      addText(ex, ey, fp && k.dir === 1 ? 'পাশ কেটে পালিয়ে গেল!' : 'পালিয়ে গেল!', '#ff4d6d', 28, 1.2);
+      Sound.taunt();
+      loseLife();
+    };
     G.rickshaws = G.rickshaws.filter((k) => {
-      if (k.x > -170 && k.x < W + 170) return true;
-      if (G.state === 'play' && k.guilty && !k.slapped) {
-        const ex = k.x < 0 ? 110 : W - 110;
-        addText(ex, groundY(k) - 70, 'পালিয়ে গেল!', '#ff4d6d', 28, 1.2);
-        Sound.taunt();
-        loseLife();
+      if (!fp) {
+        if (k.x > -170 && k.x < W + 170) return true;
+        escape(k);
+        return false;
       }
-      return false;
+      // oncoming: escaped once it has passed the sergeant; wrong-way: once it is far down the road
+      if (k.dir === 1 && k.x - 40 > cx) escape(k);
+      if (k.dir === -1 && k.x < cx - FPV.C.ESCAPE_AHEAD) { escape(k); return false; }
+      // an oncoming one stays on screen until it is also past the (third-person) camera
+      if (k.dir === 1 && k.x - 40 > Math.max(cx, FPV.renderCamX())) return false;
+      return k.x < cx + FPV.C.BEHIND + 200;
     });
 
     for (const t of G.texts) { t.t += dt; t.y += t.vy * dt; }
@@ -850,7 +938,7 @@
     }
     ctx.globalAlpha = 1;
 
-    for (const f of G.fx) {
+    for (const f of (isFP() ? [] : G.fx)) { // first-person draws its own hit effects (fpview.js)
       // expanding impact ring
       if (f.t < 0.3) {
         ctx.globalAlpha = 1 - f.t / 0.3;
@@ -875,13 +963,15 @@
 
     for (const t of G.texts) {
       const pop = 1 + 0.45 * Math.max(0, 1 - t.t / 0.15);
+      let tx = t.x, ty = t.y;
+      if (t.k && isFP()) { const q = FPV.textPos(t); tx = q.x; ty = q.y; }
       ctx.globalAlpha = t.t > t.life - 0.3 ? Math.max(0, (t.life - t.t) / 0.3) : 1;
       ctx.font = `bold ${Math.round(t.size * pop)}px ${FONT}`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineJoin = 'round';
-      ctx.strokeText(t.text, t.x, t.y);
+      ctx.strokeText(t.text, tx, ty);
       ctx.fillStyle = t.color;
-      ctx.fillText(t.text, t.x, t.y);
+      ctx.fillText(t.text, tx, ty);
     }
     ctx.globalAlpha = 1;
   }
@@ -926,6 +1016,12 @@
 
     const road = currentRoad();
     const e = env();
+    if (isFP()) {
+      FPV.render(ctx, e);
+      drawEffects();
+      finishFrame();
+      return;
+    }
     const s = road ? roadState(road) : {};
     // each layer is isolated with save/restore so art code can't leak canvas state into the next
     ctx.save(); roadHook('drawBack', ctx, s, e); ctx.restore();
@@ -950,6 +1046,11 @@
     ctx.fillRect(0, 0, W, H);
     if (showPlayer) drawPlayerMarker();
     drawEffects();
+    finishFrame();
+  }
+
+  // Shared top layers: stage banner, hurt flash, road-change fade.
+  function finishFrame() {
     drawBanner();
 
     if (G.hurtT > 0) {
@@ -969,10 +1070,37 @@
 
   // ---------- Loop ----------
   let last = performance.now();
+  // Adaptive quality: if most recent frames take longer than ~24 ms while playing, drop the
+  // canvas resolution a step (down to 0.6x), at most once every 3 s.
+  const frameTimes = [];
+  let qualityT = 0;
+  function adaptQuality(rawMs) {
+    if (G.state !== 'play' || G.paused || document.hidden || rawMs > 250) return;
+    frameTimes.push(rawMs);
+    if (frameTimes.length > 90) frameTimes.shift();
+    if (frameTimes.length < 90 || performance.now() - qualityT < 3000 || quality <= 0.6) return;
+    const sorted = frameTimes.slice().sort((a, b) => a - b);
+    if (sorted[45] > 24) {
+      quality = Math.max(0.6, +(quality - 0.2).toFixed(2));
+      qualityT = performance.now();
+      frameTimes.length = 0;
+      resize();
+    }
+  }
+
   function frame(now) {
-    const dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
+    const rawMs = now - last;
+    const dt = Math.max(0, Math.min(0.05, rawMs / 1000));
     last = now;
-    if (!G.paused) update(dt);
+    adaptQuality(rawMs);
+    if (!G.paused) {
+      // slap hit feel: a short freeze-frame, then a moment of slow motion
+      let sdt = dt;
+      if (G.hitStop > 0) { G.hitStop -= dt; sdt = 0; }
+      else if (G.slowmo > 0) { G.slowmo -= dt; sdt = dt * 0.35; }
+      if (sdt > 0) update(sdt);
+      if (isFP()) FPV.tick(dt);
+    }
     render();
     requestAnimationFrame(frame);
   }
@@ -996,6 +1124,42 @@
     });
   }
 
+  // View switch: first-person (default), third-person or the classic side view.
+  // Changing to or from Classic restarts the menu traffic; first <-> third person is just a camera swap.
+  function markView(v) {
+    document.body.classList.toggle('view-fp', v !== 'classic');
+    document.body.classList.toggle('view-classic', v === 'classic');
+    document.querySelectorAll('#viewPick .road-btn').forEach((el) => el.classList.toggle('on', el.dataset.view === v));
+    $('camBtn').classList.toggle('hidden', v === 'classic');
+    $('camBtn').textContent = v === 'tp' ? '🎥 🧍' : '🎥 👁️';
+  }
+  function setView(v) {
+    if (v !== 'classic' && !FPV) v = 'classic';
+    const swapOnly = G.view !== 'classic' && v !== 'classic' && G.rickshaws.length > 0;
+    G.view = v;
+    saveView(v);
+    if (FPV) FPV.setMode(v);
+    markView(v);
+    if (swapOnly) return;
+    G.rickshaws = []; G.texts = []; G.particles = []; G.fx = [];
+    G.player = newPlayer();
+    if (FPV) FPV.reset();
+    G.spawnT = 0.2;
+  }
+  // Mid-game camera toggle (🎥 button or C): first-person <-> third-person.
+  function toggleCamera() {
+    if (G.view === 'classic' || !FPV) return;
+    setView(G.view === 'fp' ? 'tp' : 'fp');
+  }
+  $('camBtn').addEventListener('click', (e) => { e.preventDefault(); toggleCamera(); });
+  document.querySelectorAll('#viewPick .road-btn').forEach((el) => {
+    if (el.dataset.view !== 'classic' && !FPV) el.disabled = true;
+    el.addEventListener('click', () => setView(el.dataset.view));
+  });
+  if (FPV) FPV.bind({ G, groundY });
+  setView(G.view);
+  for (let i = 0; i < 40; i++) update(0.25); // start the menu with traffic already on the road
+
   $('bestStart').textContent = G.best;
   buildRoadPicker();
   $('startBtn').addEventListener('click', startGame);
@@ -1018,10 +1182,27 @@
   });
   if (/[?&]debug\b/.test(location.search)) {
     window.thappor = {
-      G, W, H, ROADS,
-      step: (dt, n = 1) => { for (let i = 0; i < n; i++) update(dt); render(); },
+      G, W, H, ROADS, FPV, fp: TH.fp, setView, start: startGame, slap: () => trySlap(),
+      // Stage a rickshaw for art review: put({ violation: 'tesla', lane: 1, x: 800, dir: 1, pax: 2, slapped: false, slapT: 0 })
+      put(o = {}) {
+        const v = o.violation === undefined ? null : o.violation;
+        const n = o.pax !== undefined ? o.pax : v === 'overload' ? 5 : 1;
+        const k = {
+          x: o.x !== undefined ? o.x : 800, lane: o.lane !== undefined ? o.lane : 1, dir: o.dir || (v === 'wrongway' ? -1 : 1), speed: 0,
+          violation: v, guilty: !!v, obeys: true, passengers: n, wheelA: o.wheelA || 0, t: o.t || 0, age: 9,
+          slapped: !!o.slapped, slapT: o.slapT || 0, bubble: v ? VIOL[v] : null, say: o.say || null,
+          hood: o.hood || pick(HOODS), body: o.body || pick(BODIES), vest: pick(VESTS), lungi: pick(LUNGIS), skin: pick(SKINS),
+          seed: o.seed !== undefined ? o.seed : (Math.random() * 1e9) | 0,
+        };
+        k.pax = Array.from({ length: n }, (_, i) => ({ skin: pick(SKINS), shirt: pick(SHIRTS), seed: k.seed + i * 7 }));
+        G.rickshaws.push(k);
+        return k;
+      },
+      clear() { G.rickshaws = []; G.texts = []; G.particles = []; G.fx = []; },
+      step: (dt, n = 1) => { for (let i = 0; i < n; i++) { update(dt); if (isFP()) FPV.tick(dt); } render(); },
       setRoad: (i) => { G.roadIdx = i; G.startRoad = i; updateHUD(); render(); },
       get scale() { return scale; }, get offX() { return offX; }, get offY() { return offY; },
+      get quality() { return quality; }, set quality(q) { quality = q; resize(); },
     };
   }
 
