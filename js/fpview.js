@@ -472,7 +472,13 @@
     // arms up to stop an oncoming rickshaw standing right in front of him
     const block = G.rickshaws.some((k) => k.dir === 1 && !k.slapped && Math.abs(p.y - api.groundY(k)) < 26
       && p.x - k.x > C.BLOCK_MIN - 2 && p.x - k.x < C.BLOCK_STOP + 20);
-    return { t: H.t, walk: H.walk, phase: H.phase, strafe: H.strafe, slap: H.slap, block, fall: view.fall, light: L };
+    // he is drawn inside the rolled world layer, so aim at the un-rolled head position
+    let slap = H.slap;
+    if (slap && hands.slap && hands.slap.k && G.rickshaws.includes(hands.slap.k)) {
+      const hp = headRaw(hands.slap.k);
+      slap = Object.assign({}, slap, { x: hp.x, y: hp.y });
+    }
+    return { t: H.t, walk: H.walk, phase: H.phase, strafe: H.strafe, slap, block, fall: view.fall, light: L };
   }
   function phSergeant(ctx, pr, pose) {
     ctx.save();
@@ -496,11 +502,11 @@
       const pr = fp.project(pz, pu, ph);
       if (!pr) return;
       // fade him out where he would hide the face of the driver he is dealing with
-      const x0 = pr.x - 30 * pr.s, x1 = pr.x + 30 * pr.s, y0 = pr.y - 125 * pr.s;
+      const x0 = pr.x - 20 * pr.s, x1 = pr.x + 20 * pr.s, y0 = pr.y - 122 * pr.s;
       for (const k of G.rickshaws) {
         if (k.slapped || !k._fp || k._fp.d <= pr.d) continue;
         const hp = headRaw(k);
-        if (hp.x > x0 - 12 && hp.x < x1 + 12 && hp.y > y0 - 12 && hp.y < pr.y) { c.globalAlpha *= 0.45; break; }
+        if (hp.x > x0 && hp.x < x1 && hp.y > y0 && hp.y < pr.y) { c.globalAlpha *= 0.6; break; }
       }
       const pose = sergeantPose(fe.lit);
       const P = TH.fpPlayer;

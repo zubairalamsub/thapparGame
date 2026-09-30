@@ -262,7 +262,7 @@ The art must show every violation on sight:
   - **`slap`** follows the same timeline as the hands in §8. The right arm winds up and whips toward the **screen** target `(x, y)`, the driver's head: in local units `((x − pr.x) / pr.s, (y − pr.y) / pr.s)`. Contact is at 0.06 s, with a motion smear. When `hit === false`, he swings at the air.
   - **`block`** (a rickshaw has stopped right in front of him): he raises his left palm, a firm "stop" gesture, whenever he isn't slapping.
   - **`fall`** (lives ran out): he gets dizzy and collapses, and the cap falls off.
-- **Engine behaviour:** the engine fades him to 45% when he would hide the target driver's face. He is drawn inside the world, before the lighting tint, so no manual darkening is needed.
+- **Engine behaviour:** the engine fades him to 60% when he would hide a driver's face. He is drawn inside the world, before the lighting tint, so no manual darkening is needed.
 - **Budget:** up to 250 calls.
 
 ## 9. Traffic and street life (`js/fptraffic.js`): `TH.fpTraffic`
